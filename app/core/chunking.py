@@ -67,7 +67,7 @@ def chunk_pages(
     )
 
     chunks: list[Chunk] = []
-    current_section = "(제목 없음)"
+    current_section = ""  # 제목 미발견 상태 — 빈 문자열로 둔다 (화면에 "제목 없음" 노출 방지)
 
     for page in pages:
         for line in page.text.splitlines():
@@ -77,7 +77,9 @@ def chunk_pages(
                 break  # 페이지당 한 번만 갱신 — 페이지 첫머리 제목을 기대
 
         for piece in splitter.split_text(page.text):
-            prefixed = f"[{current_section}] {piece}"
+            # 제목을 찾은 경우에만 prefix를 붙인다. 제목이 없는데도 "[] "를 붙이면
+            # 모든 청크 앞에 의미 없는 토큰만 추가되어 임베딩에 잡음이 될 뿐이다.
+            prefixed = f"[{current_section}] {piece}" if current_section else piece
             chunks.append(Chunk(page=page.page, section=current_section, text=prefixed))
 
     return chunks

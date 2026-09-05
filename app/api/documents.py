@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.core import store
 from app.core.config import settings
+from app.core.text_format import clean_section, clean_text, merge_overlapping_texts
 from app.schemas.documents import (
     ChunkDetail,
     ChunkListResponse,
@@ -50,18 +51,23 @@ def get_document_chunks(document_id: str) -> ChunkListResponse:
     if not chunks:
         raise HTTPException(status_code=404, detail="존재하지 않는 document_id입니다.")
 
+    cleaned_texts = [clean_text(c.text) for c in chunks]
+
     return ChunkListResponse(
         document_id=document_id,
+        # 청크를 낱개 상자로 나열하면 겹치는 구간이 중복 표시되고 문서가 조각나 보인다.
+        # 겹침을 제거해 하나로 이어붙여서, 한 컨테이너 안에서 이어 읽을 수 있게 한다.
+        merged_text=merge_overlapping_texts(cleaned_texts),
         chunks=[
             ChunkDetail(
                 chunk_id=c.chunk_id,
                 page=c.page,
-                section=c.section,
-                text=c.text,
+                section=clean_section(c.section),
+                text=cleaned,
                 embedding_preview=c.embedding[:_EMBEDDING_PREVIEW_LEN],
                 embedding_dim=len(c.embedding),
             )
-            for c in chunks
+            for c, cleaned in zip(chunks, cleaned_texts, strict=True)
         ],
     )
 

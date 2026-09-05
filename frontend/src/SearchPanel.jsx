@@ -63,9 +63,10 @@ export default function SearchPanel() {
                 <span>
                   #{i + 1} · 유사도 {(r.similarity * 100).toFixed(1)}%
                 </span>
-                {/* 출처: 파일명 · 페이지 · 섹션 — CLAUDE.md: 출처 없는 결과는 실패로 본다 */}
+                {/* 출처: 파일명 · 페이지 (· 섹션, 있을 때만) — CLAUDE.md: 출처 없는 결과는 실패로 본다 */}
                 <span>
-                  {r.source} · {r.page}페이지 · {r.section}
+                  {r.source} · {r.page}페이지
+                  {r.section && ` · ${r.section}`}
                 </span>
               </div>
               <p className="mt-2 whitespace-pre-wrap text-gray-800">{r.text}</p>

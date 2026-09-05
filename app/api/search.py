@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 
 from app.core import embedding, store
 from app.core.config import settings
+from app.core.text_format import clean_section, clean_text
 from app.schemas.search import SearchResponse, SearchResult
 
 router = APIRouter(prefix="/api", tags=["search"])
@@ -46,8 +47,8 @@ def search(
             chunk_id=m.chunk_id,
             source=m.source,
             page=m.page,
-            section=m.section,
-            text=m.text,
+            section=clean_section(m.section),
+            text=clean_text(m.text),
             distance=m.distance,
             similarity=1.0 - m.distance,  # ChromaDB 코사인 거리 = 1 - 코사인 유사도
         )

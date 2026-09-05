@@ -25,6 +25,7 @@ class ChunkDetail(BaseModel):
 
 class ChunkListResponse(BaseModel):
     document_id: str
+    merged_text: str  # 청크 겹침 구간을 제거하고 이어붙인, 읽기 좋은 전체 본문
     chunks: list[ChunkDetail]
 
 
