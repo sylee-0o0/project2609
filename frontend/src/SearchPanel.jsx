@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { splitWithHighlights } from './highlight'
 
 // 1-B: 질문을 입력하면 의미 기반으로 가장 유사한 청크 top_k개를 찾아 보여준다.
 // 모든 결과에는 출처(파일명·페이지·섹션)를 반드시 표시한다 — 출처 없는 결과는 실패로 본다.
@@ -69,7 +70,17 @@ export default function SearchPanel() {
                   {r.section && ` · ${r.section}`}
                 </span>
               </div>
-              <p className="mt-2 whitespace-pre-wrap text-gray-800">{r.text}</p>
+              <p className="mt-2 whitespace-pre-wrap text-gray-800">
+                {splitWithHighlights(r.text, response.query).map((part, j) =>
+                  part.highlight ? (
+                    <mark key={j} className="rounded bg-yellow-200 px-0.5">
+                      {part.text}
+                    </mark>
+                  ) : (
+                    <span key={j}>{part.text}</span>
+                  ),
+                )}
+              </p>
             </li>
           ))}
         </ul>

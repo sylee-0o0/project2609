@@ -15,15 +15,13 @@
 import hashlib
 import unicodedata
 import uuid
-from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 
-from app.core import embedding, store
-from app.core.chunking import chunk_pages
+from app.core import store
 from app.core.config import settings
 from app.core.jobs import JobStatus, create_job, update_job
-from app.core.pdf_extract import extract_pdf_text
+from app.core.pipeline import process_pdf
 from app.schemas.upload import UploadResponse
 
 router = APIRouter(prefix="/api", tags=["upload"])
@@ -34,35 +32,18 @@ def _process_upload(job_id: str, pdf_path: str, source: str, content_hash: str) 
 
     ChromaDB와 fastembed 호출이 모두 동기(sync) API이므로 이 함수 전체를
     동기로 유지한다. BackgroundTasks는 동기 함수를 스레드풀에서 돌려주므로
-    이벤트 루프를 막지 않는다.
+    이벤트 루프를 막지 않는다. 실제 추출/청킹/임베딩/저장 로직은
+    app/core/pipeline.py에 있다 — scripts/reprocess.py와 공유하기 위해서다.
     """
     document_id = str(uuid.uuid4())
     try:
-        update_job(job_id, JobStatus.EXTRACTING, "PDF에서 텍스트를 추출하는 중입니다.")
-        pages = extract_pdf_text(pdf_path)
-
-        update_job(job_id, JobStatus.CHUNKING, "텍스트를 청크로 나누는 중입니다.")
-        chunks = chunk_pages(pages, settings.chunk_size, settings.chunk_overlap)
-
-        update_job(job_id, JobStatus.EMBEDDING, "청크를 벡터로 변환하는 중입니다.")
-        embeddings = embedding.embed_texts([c.text for c in chunks])
-
-        update_job(job_id, JobStatus.STORING, "ChromaDB에 저장하는 중입니다.")
-
-        # 같은 파일명으로 이전에 저장된 청크가 있으면 먼저 지운다. upsert만 믿으면
-        # 새 버전의 청크 수가 이전 버전보다 적을 때 남는 청크가 안 지워지고
-        # 그대로 남는다 — 그래서 "지우고 새로 넣는" 방식으로 항상 하나만 남긴다.
-        store.delete_by_source(source)
-
-        result = store.upsert_chunks(
-            document_id=document_id,
-            source=source,
-            content_hash=content_hash,
-            chunks=chunks,
-            embeddings=embeddings,
-            uploaded_at=datetime.now(),
+        result = process_pdf(
+            document_id,
+            pdf_path,
+            source,
+            content_hash,
+            on_progress=lambda status, message: update_job(job_id, status, message),
         )
-
         update_job(
             job_id,
             JobStatus.DONE,
