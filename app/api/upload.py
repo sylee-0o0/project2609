@@ -3,8 +3,16 @@
 업로드 요청은 파일을 디스크에 저장하고 job_id를 즉시 반환한다. 실제 처리
 (추출 → 청킹 → 임베딩 → 저장)는 BackgroundTasks로 응답 이후에 실행되며,
 진행 상태는 app/core/jobs.py의 메모리 저장소에 기록된다.
+
+## 중복 업로드 처리
+- **내용이 완전히 같은 파일**(파일명이 달라도 무방)은 SHA-256 해시로 잡아낸다.
+  이미 있는 내용이면 추출/청킹/임베딩을 아예 하지 않고 즉시 "이미 업로드된
+  파일입니다"로 안내한다 — 같은 파일을 다시 임베딩하는 건 시간 낭비다.
+- **파일명이 같은데 내용이 다른 파일**은 최신 버전으로 교체한다고 보고,
+  기존 청크를 지운 뒤 새로 저장한다 (그 파일명으로는 항상 최신 버전 하나만 남는다).
 """
 
+import hashlib
 import unicodedata
 import uuid
 from datetime import datetime
@@ -21,7 +29,7 @@ from app.schemas.upload import UploadResponse
 router = APIRouter(prefix="/api", tags=["upload"])
 
 
-def _process_upload(job_id: str, pdf_path: str, source: str) -> None:
+def _process_upload(job_id: str, pdf_path: str, source: str, content_hash: str) -> None:
     """백그라운드에서 실행되는 실제 처리 파이프라인 (동기 함수).
 
     ChromaDB와 fastembed 호출이 모두 동기(sync) API이므로 이 함수 전체를
@@ -40,9 +48,16 @@ def _process_upload(job_id: str, pdf_path: str, source: str) -> None:
         embeddings = embedding.embed_texts([c.text for c in chunks])
 
         update_job(job_id, JobStatus.STORING, "ChromaDB에 저장하는 중입니다.")
+
+        # 같은 파일명으로 이전에 저장된 청크가 있으면 먼저 지운다. upsert만 믿으면
+        # 새 버전의 청크 수가 이전 버전보다 적을 때 남는 청크가 안 지워지고
+        # 그대로 남는다 — 그래서 "지우고 새로 넣는" 방식으로 항상 하나만 남긴다.
+        store.delete_by_source(source)
+
         result = store.upsert_chunks(
             document_id=document_id,
             source=source,
+            content_hash=content_hash,
             chunks=chunks,
             embeddings=embeddings,
             uploaded_at=datetime.now(),
@@ -72,12 +87,26 @@ def upload_pdf(file: UploadFile, background_tasks: BackgroundTasks) -> UploadRes
     # 파일명은 NFC로 정규화한다 (macOS 등에서 온 NFD 파일명과 비교/검색이 어긋나는 것을 방지).
     filename = unicodedata.normalize("NFC", file.filename)
 
+    content = file.file.read()
+    content_hash = hashlib.sha256(content).hexdigest()
+
     job = create_job(filename)
+
+    # 완전히 같은 내용의 파일이 이미 있으면, 처리를 아예 시작하지 않고 바로 안내한다.
+    duplicate = store.find_duplicate_by_hash(content_hash)
+    if duplicate is not None:
+        update_job(
+            job.job_id,
+            JobStatus.DUPLICATE,
+            f"이미 업로드된 파일입니다 (기존 파일명: {duplicate.source}, "
+            f"{duplicate.chunk_count}개 청크, 업로드 시각: {duplicate.uploaded_at}).",
+        )
+        return UploadResponse(job_id=job.job_id, filename=filename)
 
     dest_path = settings.upload_dir / f"{job.job_id}_{filename}"
     with open(dest_path, "wb") as f:
-        f.write(file.file.read())
+        f.write(content)
 
-    background_tasks.add_task(_process_upload, job.job_id, str(dest_path), filename)
+    background_tasks.add_task(_process_upload, job.job_id, str(dest_path), filename, content_hash)
 
     return UploadResponse(job_id=job.job_id, filename=filename)

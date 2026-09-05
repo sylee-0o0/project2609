@@ -31,6 +31,7 @@ class JobStatus(StrEnum):
     STORING = "storing"  # ChromaDB 저장 중
     DONE = "done"
     FAILED = "failed"
+    DUPLICATE = "duplicate"  # 이미 업로드된 파일이라 처리를 건너뜀
 
 
 @dataclass

@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import DocumentsPanel from './DocumentsPanel'
 import SearchPanel from './SearchPanel'
 import UploadPanel from './UploadPanel'
 
 const TABS = [
   { key: 'search', label: '검색' },
   { key: 'upload', label: '업로드' },
+  { key: 'documents', label: '문서' },
 ]
 
 export default function App() {
@@ -36,7 +38,9 @@ export default function App() {
       </div>
 
       <div className="mt-6">
-        {tab === 'search' ? <SearchPanel /> : <UploadPanel />}
+        {tab === 'search' && <SearchPanel />}
+        {tab === 'upload' && <UploadPanel />}
+        {tab === 'documents' && <DocumentsPanel />}
       </div>
     </div>
   )

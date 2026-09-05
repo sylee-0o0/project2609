@@ -48,7 +48,10 @@ start_backend() {
   echo "[backend] 시작 중... http://127.0.0.1:$BACKEND_PORT"
   (
     cd "$ROOT_DIR"
-    nohup uv run uvicorn app.main:app --reload --port "$BACKEND_PORT" \
+    # --reload-dir app: 기본값(현재 폴더 전체)으로 두면 .venv(수만 개 .py 파일),
+    # data/(업로드·ChromaDB 파일), .fastembed_cache/까지 감시 대상이 된다.
+    # 우리 코드는 app/ 아래에만 있으므로 거기만 감시하도록 좁힌다.
+    nohup uv run uvicorn app.main:app --reload --reload-dir app --port "$BACKEND_PORT" \
       > "$LOG_DIR/backend.log" 2>&1 &
     echo $! > "$pid_file"
   )

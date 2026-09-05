@@ -38,7 +38,10 @@ class Settings(BaseSettings):
     chunk_overlap: int = 100
 
     # 검색 (1-B에서 사용)
-    search_distance_threshold: float = 0.8
+    # bge-m3 실측 기준(실제 한글 리포트 1건, 질문 6개): 관련 질문은 distance 0.24~0.27,
+    # 무관한 질문은 0.53~0.62로 나왔다. 그 사이인 0.45로 잡아 여유를 뒀다.
+    # 문서가 다양해지면 이 값도 같이 재측정해서 조정해야 한다 — .env로 뺀 이유.
+    search_distance_threshold: float = 0.45
 
     def ensure_dirs(self) -> None:
         """앱 시작 시 필요한 로컬 디렉터리를 만들어 둔다."""

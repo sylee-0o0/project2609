@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.api import jobs, search, upload
+from app.api import documents, jobs, search, upload
 from app.core.config import settings
 
 
@@ -23,6 +23,7 @@ app = FastAPI(title="글로벌 ICT 동향 리포트 조회", lifespan=lifespan)
 app.include_router(upload.router)
 app.include_router(jobs.router)
 app.include_router(search.router)
+app.include_router(documents.router)
 
 
 @app.get("/api/health")

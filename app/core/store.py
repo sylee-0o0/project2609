@@ -60,6 +60,7 @@ class UpsertResult:
 def upsert_chunks(
     document_id: str,
     source: str,
+    content_hash: str,
     chunks: list[Chunk],
     embeddings: list[list[float]],
     uploaded_at: datetime | None = None,
@@ -71,6 +72,8 @@ def upsert_chunks(
 
     필수 메타데이터(CLAUDE.md): document_id / chunk_id / source / page / section / uploaded_at
     이 중 하나라도 빠지면 나중에 출처를 못 붙이거나 재적재가 필요해지므로 절대 누락하지 않는다.
+    `content_hash`는 CLAUDE.md 기준선에는 없지만, 중복 업로드 감지를 위해 추가한 필드다
+    (app/api/upload.py에서 사용).
     """
     if len(chunks) != len(embeddings):
         raise ValueError(
@@ -96,6 +99,7 @@ def upsert_chunks(
                 "page": chunk.page,
                 "section": chunk.section,
                 "uploaded_at": uploaded_at_iso,
+                "content_hash": content_hash,
             }
         )
 
@@ -108,6 +112,84 @@ def upsert_chunks(
     )
 
     return UpsertResult(document_id=document_id, chunk_count=len(chunks))
+
+
+@dataclass
+class DocumentInfo:
+    document_id: str
+    source: str
+    uploaded_at: str
+    chunk_count: int
+
+
+def list_documents() -> list[DocumentInfo]:
+    """업로드된 문서 목록을 document_id 단위로 묶어서 돌려준다 (최신 업로드 순).
+
+    청크마다 문서 메타데이터(source/uploaded_at)가 중복 저장되어 있으므로,
+    document_id로 묶어서 대표값 하나 + 청크 수를 계산한다.
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+
+    result = collection.get(include=["metadatas"])
+    grouped: dict[str, DocumentInfo] = {}
+    for meta in result["metadatas"]:
+        doc_id = meta["document_id"]
+        if doc_id not in grouped:
+            grouped[doc_id] = DocumentInfo(
+                document_id=doc_id,
+                source=meta["source"],
+                uploaded_at=meta["uploaded_at"],
+                chunk_count=0,
+            )
+        grouped[doc_id].chunk_count += 1
+
+    return sorted(grouped.values(), key=lambda d: d.uploaded_at, reverse=True)
+
+
+def find_duplicate_by_hash(content_hash: str) -> DocumentInfo | None:
+    """같은 content_hash를 가진 기존 문서가 있으면 그 정보를 돌려준다 (완전히 동일한 내용).
+
+    파일명이 달라도 내용이 100% 같으면 잡아낸다 — 예: 같은 리포트를 다른 이름으로
+    저장해서 다시 올린 경우.
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return None
+
+    result = collection.get(where={"content_hash": content_hash}, include=["metadatas"], limit=1)
+    if not result["metadatas"]:
+        return None
+
+    meta = result["metadatas"][0]
+    # 청크 개수까지 정확히 알려주려면 같은 document_id로 다시 세어야 한다.
+    count_result = collection.get(where={"document_id": meta["document_id"]}, include=[])
+    return DocumentInfo(
+        document_id=meta["document_id"],
+        source=meta["source"],
+        uploaded_at=meta["uploaded_at"],
+        chunk_count=len(count_result["ids"]),
+    )
+
+
+def delete_by_source(source: str) -> int:
+    """같은 파일명(source)을 가진 기존 청크를 모두 지운다.
+
+    같은 이름으로 내용이 다른 파일이 다시 올라왔을 때(= 최신 버전으로 교체) 사용한다.
+    upsert만으로는 이전 버전의 청크 개수가 더 많았을 경우 남은 청크가 삭제되지 않고
+    그대로 남을 수 있어서, 교체 전에 먼저 통째로 지우고 새로 넣는 방식을 쓴다.
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return 0
+
+    result = collection.get(where={"source": source}, include=[])
+    if not result["ids"]:
+        return 0
+
+    collection.delete(ids=result["ids"])
+    return len(result["ids"])
 
 
 @dataclass

@@ -18,7 +18,7 @@ from app.schemas.upload import JobStatusResponse
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 _POLL_INTERVAL_SECONDS = 0.5
-_TERMINAL_STATUSES = {JobStatus.DONE, JobStatus.FAILED}
+_TERMINAL_STATUSES = {JobStatus.DONE, JobStatus.FAILED, JobStatus.DUPLICATE}
 
 
 def _to_response(job) -> JobStatusResponse:
