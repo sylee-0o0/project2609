@@ -12,3 +12,23 @@ class DocumentInfo(BaseModel):
 
 class DocumentListResponse(BaseModel):
     documents: list[DocumentInfo]
+
+
+class ChunkDetail(BaseModel):
+    chunk_id: str
+    page: int
+    section: str
+    text: str  # 청크 원문 (섹션 제목 prefix 포함)
+    embedding_preview: list[float]  # 임베딩 벡터 앞부분 일부 (전체를 다 보여주면 너무 김)
+    embedding_dim: int  # 임베딩 벡터의 전체 차원 수 (bge-m3 기준 1024)
+
+
+class ChunkListResponse(BaseModel):
+    document_id: str
+    chunks: list[ChunkDetail]
+
+
+class DeleteDocumentResponse(BaseModel):
+    document_id: str
+    deleted_chunk_count: int
+    deleted_file: bool

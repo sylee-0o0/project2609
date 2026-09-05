@@ -173,6 +173,68 @@ def find_duplicate_by_hash(content_hash: str) -> DocumentInfo | None:
     )
 
 
+@dataclass
+class ChunkDetail:
+    chunk_id: str
+    page: int
+    section: str
+    text: str
+    embedding: list[float]
+
+
+def get_chunks(document_id: str) -> list[ChunkDetail]:
+    """한 문서(document_id)에 속한 청크를 페이지·순서대로 돌려준다.
+
+    임베딩 벡터도 함께 돌려준다 — `include=["embeddings"]`를 명시해야 한다.
+    (ChromaDB는 벡터가 크기 때문에 명시적으로 요청하지 않으면 포함하지 않는다.)
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+
+    result = collection.get(
+        where={"document_id": document_id},
+        include=["documents", "metadatas", "embeddings"],
+    )
+    if not result["ids"]:
+        return []
+
+    rows = list(zip(result["metadatas"], result["documents"], result["embeddings"], strict=True))
+    # chunk_id는 "{document_id}::{순번}" 형태로 만들었으므로, 순번 기준으로 정렬하면
+    # 원문 순서(페이지 진행 순서)와 일치한다.
+    rows.sort(key=lambda r: int(r[0]["chunk_id"].rsplit("::", 1)[1]))
+
+    return [
+        ChunkDetail(
+            chunk_id=meta["chunk_id"],
+            page=meta["page"],
+            section=meta["section"],
+            text=doc,
+            embedding=list(embedding),
+        )
+        for meta, doc, embedding in rows
+    ]
+
+
+def delete_by_document_id(document_id: str) -> tuple[int, str | None]:
+    """한 문서의 청크를 전부 지운다. (파일 삭제 기능에서 사용)
+
+    삭제된 청크 개수와, 업로드 당시 저장해둔 원본 PDF 파일도 함께 지울 수 있도록
+    파일명(source)을 함께 돌려준다 — 문서가 없었으면 (0, None).
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return 0, None
+
+    result = collection.get(where={"document_id": document_id}, include=["metadatas"])
+    if not result["ids"]:
+        return 0, None
+
+    source = result["metadatas"][0]["source"]
+    collection.delete(ids=result["ids"])
+    return len(result["ids"]), source
+
+
 def delete_by_source(source: str) -> int:
     """같은 파일명(source)을 가진 기존 청크를 모두 지운다.
 
