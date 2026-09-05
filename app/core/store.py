@@ -108,3 +108,52 @@ def upsert_chunks(
     )
 
     return UpsertResult(document_id=document_id, chunk_count=len(chunks))
+
+
+@dataclass
+class QueryMatch:
+    document_id: str
+    chunk_id: str
+    source: str
+    page: int
+    section: str
+    text: str
+    distance: float
+
+
+def query_similar(query_embedding: list[float], top_k: int) -> list[QueryMatch]:
+    """쿼리 벡터와 가장 가까운(코사인 거리가 작은) 청크 top_k개를 찾는다.
+
+    컬렉션이 비어 있으면 빈 리스트를 반환한다 — 호출하는 쪽(app/api/search.py)이
+    "관련 문서 없음"과 "아직 업로드된 문서가 없음"을 구분해서 처리한다.
+    """
+    collection = get_collection()
+    if collection.count() == 0:
+        return []
+
+    result = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k,
+        include=["documents", "metadatas", "distances"],
+    )
+
+    # collection.query()는 여러 쿼리를 한 번에 처리할 수 있게 설계되어 있어서
+    # 결과가 "쿼리별 리스트의 리스트"로 온다. 우리는 쿼리를 하나만 보냈으므로 [0]만 쓴다.
+    documents = result["documents"][0]
+    metadatas = result["metadatas"][0]
+    distances = result["distances"][0]
+
+    matches: list[QueryMatch] = []
+    for doc, meta, dist in zip(documents, metadatas, distances, strict=True):
+        matches.append(
+            QueryMatch(
+                document_id=meta["document_id"],
+                chunk_id=meta["chunk_id"],
+                source=meta["source"],
+                page=meta["page"],
+                section=meta["section"],
+                text=doc,
+                distance=dist,
+            )
+        )
+    return matches
