@@ -24,3 +24,4 @@ Thumbs.db
 .idea/
 scripts/.pids/
 scripts/.logs/
+scripts/_tmp_uvicorn.log

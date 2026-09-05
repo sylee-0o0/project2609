@@ -26,11 +26,11 @@ class Settings(BaseSettings):
     upload_dir: Path = Path("./data/uploads")
 
     # 임베딩 (fastembed)
-    # ⚠️ 미확정 상태. CLAUDE.md가 지정한 BAAI/bge-m3를 fastembed 0.8.0이
-    # 지원하지 않는 것을 확인했다 (TextEmbedding.list_supported_models() 기준).
-    # 사용자와 대체 모델을 재논의하기 전까지 빈 문자열로 둔다.
-    # 관련 core/embedding.py는 이 값이 비어 있으면 명확한 에러를 던진다.
-    embedding_model_name: str = ""
+    # BAAI/bge-m3(1024차원)는 fastembed 0.8.0에 내장되어 있지 않아
+    # app/core/embedding.py에서 add_custom_model()로 커스텀 등록한다.
+    # 근거(추측 아님): BAAI/bge-m3 공식 HF 저장소에 onnx/model.onnx + onnx/model.onnx_data가
+    # 실제로 존재하고, tokenizer_config.json에 model_max_length=8192가 명시되어 있음을 확인함.
+    embedding_model_name: str = "BAAI/bge-m3"
     fastembed_cache_dir: Path = Path("./.fastembed_cache")
 
     # 청킹 기준선 (CLAUDE.md: 600자 / overlap 100자)
