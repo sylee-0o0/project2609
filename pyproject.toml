@@ -1,0 +1,30 @@
+[project]
+name = "ict-report"
+version = "0.1.0"
+description = "글로벌 ICT 동향 리포트 조회 - 벡터 DB 학습용 실습 프로젝트"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "chromadb>=1.5.9",
+    "fastapi>=0.141.1",
+    "fastembed>=0.8.0",
+    "langchain-text-splitters>=1.1.2",
+    "pydantic-settings>=2.15.0",
+    "pypdf>=6.17.0",
+    "python-multipart>=0.0.32",
+    "uvicorn[standard]>=0.52.4",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.6",
+]

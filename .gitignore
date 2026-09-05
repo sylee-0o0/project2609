@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# 환경 변수 (임베딩 모델 캐시 경로 등 로컬 설정 포함)
+.env
+
+# 데이터 (ChromaDB 영속 데이터, 업로드 원본, 임베딩 모델 캐시)
+data/chroma/
+data/uploads/
+.cache/
+.fastembed_cache/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS / 에디터
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+scripts/.pids/
+scripts/.logs/
