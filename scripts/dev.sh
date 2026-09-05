@@ -25,6 +25,20 @@ is_running() {
   [[ -f "$pid_file" ]] && kill -0 "$(cat "$pid_file")" 2>/dev/null
 }
 
+# 포트를 실제로 점유 중인 프로세스의 PID를 반환한다 (없으면 빈 문자열).
+#
+# 왜 필요한가: `npm run dev`는 vite를 자식 프로세스(node.exe)로 띄우는데,
+# git bash의 `nohup ... &`가 기록하는 $!는 그 부모(npm) PID다. Windows에서는
+# 부모를 죽여도 자식 node 프로세스가 안 죽고 포트를 계속 점유하는 경우가 있다.
+# 그래서 PID 파일만 믿지 않고, 실제로 포트를 리스닝 중인 프로세스를 조회해서
+# 상태 확인(status)과 중지(stop) 양쪽에서 진실의 근원(source of truth)으로 쓴다.
+port_pid() {
+  local port="$1"
+  powershell -NoProfile -Command \
+    "(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty OwningProcess)" \
+    2>/dev/null | tr -d '\r'
+}
+
 start_backend() {
   local pid_file="$PID_DIR/backend.pid"
   if is_running "$pid_file"; then
@@ -63,25 +77,42 @@ start_frontend() {
 
 stop_one() {
   local name="$1"
+  local port="$2"
   local pid_file="$PID_DIR/$name.pid"
+  local stopped=""
+
   if is_running "$pid_file"; then
     local pid
     pid="$(cat "$pid_file")"
     kill "$pid" 2>/dev/null || true
-    rm -f "$pid_file"
-    echo "[$name] 중지됨 (PID $pid)"
+    stopped="$pid"
+  fi
+  rm -f "$pid_file"
+
+  # PID 파일로 못 죽인 잔여 프로세스(예: npm의 자식 node.exe)가 포트를 계속
+  # 점유하고 있을 수 있으므로, 실제 포트 리스너를 다시 확인해서 마저 정리한다.
+  sleep 0.3
+  local leftover
+  leftover="$(port_pid "$port")"
+  if [[ -n "$leftover" ]]; then
+    powershell -NoProfile -Command "Stop-Process -Id $leftover -Force" >/dev/null 2>&1
+    stopped="${stopped:+$stopped, }$leftover(잔여)"
+  fi
+
+  if [[ -n "$stopped" ]]; then
+    echo "[$name] 중지됨 (PID $stopped)"
   else
     echo "[$name] 실행 중이 아닙니다."
-    rm -f "$pid_file"
   fi
 }
 
 status_one() {
   local name="$1"
   local port="$2"
-  local pid_file="$PID_DIR/$name.pid"
-  if is_running "$pid_file"; then
-    echo "[$name] 실행 중 (PID $(cat "$pid_file"), 포트 :$port)"
+  local pid
+  pid="$(port_pid "$port")"
+  if [[ -n "$pid" ]]; then
+    echo "[$name] 실행 중 (PID $pid, 포트 :$port)"
   else
     echo "[$name] 중지됨"
   fi
@@ -98,9 +129,9 @@ case "${1:-}" in
     ;;
   stop)
     case "${2:-all}" in
-      backend) stop_one backend ;;
-      frontend) stop_one frontend ;;
-      all) stop_one backend; stop_one frontend ;;
+      backend) stop_one backend "$BACKEND_PORT" ;;
+      frontend) stop_one frontend "$FRONTEND_PORT" ;;
+      all) stop_one backend "$BACKEND_PORT"; stop_one frontend "$FRONTEND_PORT" ;;
       *) echo "알 수 없는 대상: ${2:-}"; exit 1 ;;
     esac
     ;;
